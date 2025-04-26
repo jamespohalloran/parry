@@ -63,25 +63,26 @@ impl NormalConstraints for EdgePseudoTriangles {
         let abs_x = normal.x.abs();
         let abs_y = normal.y.abs();
 
-        if segment_dot.abs() < 0.9 {
-            // Corner detected
-            if abs_y > abs_x {
-                // Definitely more vertical → snap vertically
-                normal.x = 0.0;
-                normal.y = normal.y.signum();
-            } else {
-                // Definitely more horizontal → snap horizontally
+        if segment_dot.abs() < 0.99 {
+            // Corner case
+
+            if abs_x > abs_y {
+                // Deeper in X axis → push out horizontally
                 normal.x = normal.x.signum();
                 normal.y = 0.0;
+            } else {
+                // Deeper in Y axis → push out vertically
+                normal.x = 0.0;
+                normal.y = normal.y.signum();
             }
         } else {
-            // Flat edge (normal surface)
-            if abs_y > abs_x {
-                normal.x = 0.0;
-                normal.y = normal.y.signum();
-            } else {
+            // Flat edge
+            if abs_x > abs_y {
                 normal.x = normal.x.signum();
                 normal.y = 0.0;
+            } else {
+                normal.x = 0.0;
+                normal.y = normal.y.signum();
             }
         }
 
