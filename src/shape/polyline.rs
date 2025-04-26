@@ -63,7 +63,7 @@ impl NormalConstraints for EdgePseudoTriangles {
         let abs_x = normal.x.abs();
         let abs_y = normal.y.abs();
 
-        if segment_dot.abs() < 0.99 {
+        if segment_dot.abs() < 0.8 {
             // Corner case
 
             if abs_x > abs_y {
