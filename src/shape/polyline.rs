@@ -56,78 +56,39 @@ impl EdgePseudoTriangles {
 
 impl NormalConstraints for EdgePseudoTriangles {
     fn project_local_normal_mut(&self, normal: &mut Vector<Real>) -> bool {
-        #[cfg(all(feature = "wasm-bindgen", feature = "dim2"))]
-        {
-            web_sys::console::log_1(&format!("✅ CUSTOM NORMAL CONSTRAINT: orig=[{:.3}, {:.3}], edge1=[{:.3}, {:.3}], edge2=[{:.3}, {:.3}]", 
-                normal.x, normal.y, self.edges[0].x, self.edges[0].y, self.edges[1].x, self.edges[1].y).into());
-        }
-
-        // Analyze the segment orientations
-        let segment_dir = self.edges[0]; // Current segment direction
-        let next_dir = self.edges[1];    // Next segment direction
-        
-        // Check if we're at a corner (segments have significantly different directions)
+        let segment_dir = self.edges[0];
+        let next_dir = self.edges[1];
         let segment_dot = segment_dir.dot(&next_dir);
-        
-        // For corner handling, prefer normal that points "up" for platforming games
-        if segment_dot.abs() < 0.9 { // Segments are at a significant angle to each other
-            #[cfg(all(feature = "wasm-bindgen", feature = "dim2"))]
-            {
-                web_sys::console::log_1(&"⚡ CORNER CASE DETECTED".into());
-            }
-            
-            // For corners, prefer upward normals for gameplay consistency
-            // If original normal has significant Y component, use it
-            if normal.y.abs() > 0.3 {
-                // If the normal is pointing up, keep vertical
-                if normal.y > 0.0 {
-                    normal.x = 0.0; 
-                    normal.y = 1.0;
-                } else {
-                    // If pointing down, try to use directional information
-                    let abs_x = normal.x.abs();
-                    let abs_y = normal.y.abs();
-                    
-                    if abs_x > abs_y * 1.5 {
-                        // Strongly horizontal movement, prefer horizontal normal
-                        normal.x = normal.x.signum();
-                        normal.y = 0.0;
-                    } else {
-                        // Otherwise vertical
-                        normal.x = 0.0;
-                        normal.y = -1.0;
-                    }
-                }
+
+        let abs_x = normal.x.abs();
+        let abs_y = normal.y.abs();
+
+        if segment_dot.abs() < 0.9 {
+            // Corner detected
+            if abs_y > abs_x {
+                // Definitely more vertical → snap vertically
+                normal.x = 0.0;
+                normal.y = normal.y.signum();
             } else {
-                // More horizontal movement, use horizontal normal based on original direction
+                // Definitely more horizontal → snap horizontally
                 normal.x = normal.x.signum();
                 normal.y = 0.0;
             }
         } else {
-            // Regular segment (not a corner) - use standard axis-aligned approach 
-            let abs_x = normal.x.abs();
-            let abs_y = normal.y.abs();
-
-            // With slight preference for vertical normals (better for platformers)
-            if abs_x > abs_y * 1.2 {
-                // Strongly horizontal movement, use horizontal normal
-                normal.x = normal.x.signum();
-                normal.y = 0.0;
-            } else {
-                // Otherwise prefer vertical normal
+            // Flat edge (normal surface)
+            if abs_y > abs_x {
                 normal.x = 0.0;
                 normal.y = normal.y.signum();
+            } else {
+                normal.x = normal.x.signum();
+                normal.y = 0.0;
             }
-        }
-        
-        #[cfg(all(feature = "wasm-bindgen", feature = "dim2"))]
-        {
-            web_sys::console::log_1(&format!("✅ NORMAL FIXED TO: [{:.3}, {:.3}]", normal.x, normal.y).into());
         }
 
         true
     }
 }
+
 
 
 impl Polyline {
