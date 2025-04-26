@@ -90,10 +90,6 @@ impl NormalConstraints for EdgePseudoTriangles {
 impl Polyline {
     /// Creates a new polyline from a vertex buffer and an index buffer.
     pub fn new(vertices: Vec<Point<Real>>, indices: Option<Vec<[u32; 2]>>) -> Self {
-
-        panic!("💥 THIS IS A TEST PANIC FROM CUSTOM PARRY 💥");
-
-
         let indices =
             indices.unwrap_or_else(|| (0..vertices.len() as u32 - 1).map(|i| [i, i + 1]).collect());
         let data = indices.iter().enumerate().map(|(i, idx)| {
