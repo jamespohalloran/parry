@@ -60,25 +60,23 @@ impl NormalConstraints for EdgePseudoTriangles {
         let next_dir = self.edges[1];
         let segment_dot = segment_dir.dot(&next_dir);
 
-        let abs_x = normal.x.abs();
-        let abs_y = normal.y.abs();
-
-        // Only apply hard corner logic if the object is moving downward
-        if segment_dot.abs() < 0.8 && normal.y < 0.0 {
-            // Hard corner detected AND ball moving down
-            if abs_y > abs_x {
-                // More vertical impact -> snap pure vertical
-                normal.x = 0.0;
-                normal.y = normal.y.signum();
-            } else {
-                // More horizontal impact -> snap pure horizontal
-                normal.x = normal.x.signum();
-                normal.y = 0.0;
+        // Check if it's a "corner"
+        if segment_dot.abs() < 0.8 {
+            // Only if the normal points DOWN (y < 0), we care about snapping
+            if normal.y < -0.2 {
+                if normal.x.abs() > normal.y.abs() {
+                    // More horizontal impact
+                    normal.x = normal.x.signum();
+                    normal.y = 0.0;
+                } else {
+                    // More vertical impact
+                    normal.x = 0.0;
+                    normal.y = -1.0;
+                }
             }
-        }
-        else {
-            // Flat edge or ball moving up
-            if abs_x > abs_y {
+        } else {
+            // Flat edge - standard snapping
+            if normal.x.abs() > normal.y.abs() {
                 normal.x = normal.x.signum();
                 normal.y = 0.0;
             } else {
@@ -90,8 +88,6 @@ impl NormalConstraints for EdgePseudoTriangles {
         true
     }
 }
-
-
 
 impl Polyline {
     /// Creates a new polyline from a vertex buffer and an index buffer.
