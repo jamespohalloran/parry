@@ -56,39 +56,41 @@ impl EdgePseudoTriangles {
 
 impl NormalConstraints for EdgePseudoTriangles {
     fn project_local_normal_mut(&self, normal: &mut Vector<Real>) -> bool {
-        // Prefer face normal first
-        let face_normal = self.face;
-        let edge_normal1 = self.edges[0];
-        let edge_normal2 = self.edges[1];
+        let segment_dir = self.edges[0];
+        let next_dir = self.edges[1];
+        let segment_dot = segment_dir.dot(&next_dir);
 
-        let dot_face = normal.dot(&face_normal);
+        let mut x = normal.x;
+        let mut y = normal.y;
 
-        if dot_face >= 0.5 {
-            // If we're reasonably aligned with the face, just snap to face
-            *normal = face_normal;
-        } else {
-            // Otherwise pick whichever edge normal aligns better
-            let dot1 = normal.dot(&edge_normal1);
-            let dot2 = normal.dot(&edge_normal2);
-
-            if dot1 > dot2 {
-                *normal = edge_normal1;
+        if segment_dot.abs() < 0.8 {
+            // Hard corner
+            if y.abs() > x.abs() {
+                // Mostly vertical impact
+                x *= 0.2; // Keep 20% of horizontal
+                y = y.signum();
             } else {
-                *normal = edge_normal2;
+                // Mostly horizontal impact
+                y *= 0.2; // Keep 20% of vertical
+                x = x.signum();
+            }
+        } else {
+            // Flat edge
+            if x.abs() > y.abs() {
+                y *= 0.2;
+                x = x.signum();
+            } else {
+                x *= 0.2;
+                y = y.signum();
             }
         }
 
-        // If the new normal is somehow tiny, fallback to face
-        if normal.norm_squared() < 0.8 {
-            *normal = face_normal;
-        }
-
-        // Always normalize to make sure it's unit length
-        *normal = normal.normalize();
-
+        *normal = Vector::new(x, y).normalize();
         true
     }
 }
+
+
 
 impl Polyline {
     /// Creates a new polyline from a vertex buffer and an index buffer.
