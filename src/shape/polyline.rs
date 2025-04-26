@@ -55,16 +55,37 @@ impl EdgePseudoTriangles {
 }
 
 impl NormalConstraints for EdgePseudoTriangles {
-    fn project_local_normal_mut(&self, normal: &mut Vector<Real>) -> bool {
-        let dot_face = normal.dot(&self.face);
-        if dot_face >= 0.0 {
-            *normal = self.face;
-            true
-        } else {
-            false
-        }
+      fn project_local_normal_mut(&self, normal: &mut
+  Vector<Real>) -> bool {
+    #[cfg(all(feature = "wasm-bindgen", feature = "dim2"))]
+    {
+        web_sys::console::log_1(&"✅ CUSTOM PARALLEL: project_local_normal_mut called".into());
     }
-}
+
+          // Get absolute components of the normal
+          let abs_x = normal[0].abs();
+          let abs_y = normal[1].abs();
+
+          // If x component is larger, make normal horizontal
+          if abs_x > abs_y {
+              // Keep sign of x component
+              normal[0] = normal[0].signum();
+              normal[1] = 0.0;
+              #[cfg(feature = "dim3")]
+              { normal[2] = 0.0; }
+          } else {
+              // Otherwise make normal vertical
+              normal[0] = 0.0;
+              normal[1] = normal[1].signum();
+              #[cfg(feature = "dim3")]
+              { normal[2] = 0.0; }
+          }
+
+          // Normalize the normal
+          *normal = normal.normalize();
+          true
+      }
+  }
 
 impl Polyline {
     /// Creates a new polyline from a vertex buffer and an index buffer.
