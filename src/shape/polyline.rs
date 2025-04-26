@@ -56,34 +56,22 @@ impl EdgePseudoTriangles {
 
 impl NormalConstraints for EdgePseudoTriangles {
     fn project_local_normal_mut(&self, normal: &mut Vector<Real>) -> bool {
-        let segment_dir = self.edges[0];
-        let next_dir = self.edges[1];
-        let segment_dot = segment_dir.dot(&next_dir);
+        let face_normal = self.face;
+        let edge_normal1 = self.edges[0];
+        let edge_normal2 = self.edges[1];
 
-        let abs_x = normal.x.abs();
-        let abs_y = normal.y.abs();
+        let dot_face = normal.dot(&face_normal);
+        let dot_edge1 = normal.dot(&edge_normal1);
+        let dot_edge2 = normal.dot(&edge_normal2);
 
-        if segment_dot.abs() < 0.8 {
-            // Hard corner detected
-            if normal.y.abs() > normal.x.abs() {
-                // More vertical impact -> snap pure vertical
-                normal.x = 0.0;
-                normal.y = normal.y.signum();
-            } else {
-                // More horizontal impact -> snap pure horizontal
-                normal.x = normal.x.signum();
-                normal.y = 0.0;
-            }
-        }
-        else {
-            // Flat edge
-            if abs_x > abs_y {
-                normal.x = normal.x.signum();
-                normal.y = 0.0;
-            } else {
-                normal.x = 0.0;
-                normal.y = normal.y.signum();
-            }
+        let best = dot_face.max(dot_edge1.max(dot_edge2));
+
+        if best == dot_face {
+            *normal = face_normal;
+        } else if best == dot_edge1 {
+            *normal = edge_normal1;
+        } else {
+            *normal = edge_normal2;
         }
 
         true
