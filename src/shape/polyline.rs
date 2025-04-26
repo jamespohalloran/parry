@@ -340,8 +340,7 @@ impl SimdCompositeShape for Polyline {
 
 impl TypedSimdCompositeShape for Polyline {
     type PartShape = Segment;
-    type PartNormalConstraints = ();
-    type PartId = u32;
+    type PartNormalConstraints = EdgePseudoTriangles; 
 
     #[inline(always)]
     fn map_typed_part_at(
@@ -354,7 +353,9 @@ impl TypedSimdCompositeShape for Polyline {
         ),
     ) {
         let seg = self.segment(i);
-        f(None, &seg, None)
+        let next_seg = self.segment((i + 1) % self.num_segments() as u32);
+        let pseudo_triangle = EdgePseudoTriangles::new(&seg, &next_seg);
+        f(None, &seg, Some(&pseudo_triangle));
     }
 
     #[inline(always)]
@@ -364,7 +365,9 @@ impl TypedSimdCompositeShape for Polyline {
         mut f: impl FnMut(Option<&Isometry<Real>>, &dyn Shape, Option<&dyn NormalConstraints>),
     ) {
         let seg = self.segment(i);
-        f(None, &seg, None)
+        let next_seg = self.segment((i + 1) % self.num_segments() as u32);
+        let pseudo_triangle = EdgePseudoTriangles::new(&seg, &next_seg);
+        f(None, &seg, Some(&pseudo_triangle));
     }
 
     fn typed_qbvh(&self) -> &Qbvh<u32> {
