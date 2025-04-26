@@ -54,6 +54,18 @@ impl EdgePseudoTriangles {
     }
 }
 
+impl NormalConstraints for EdgePseudoTriangles {
+    fn project_local_normal_mut(&self, normal: &mut Vector<Real>) -> bool {
+        let dot_face = normal.dot(&self.face);
+        if dot_face >= 0.0 {
+            *normal = self.face;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 impl Polyline {
     /// Creates a new polyline from a vertex buffer and an index buffer.
     pub fn new(vertices: Vec<Point<Real>>, indices: Option<Vec<[u32; 2]>>) -> Self {
@@ -340,7 +352,8 @@ impl SimdCompositeShape for Polyline {
 
 impl TypedSimdCompositeShape for Polyline {
     type PartShape = Segment;
-    type PartNormalConstraints = EdgePseudoTriangles; 
+    type PartNormalConstraints = EdgePseudoTriangles;
+    type PartId = u32; // Added PartId implementation
 
     #[inline(always)]
     fn map_typed_part_at(
