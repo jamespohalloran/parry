@@ -266,13 +266,14 @@ mod simd {
 
 use std::env;
 
-pub fn log_custom_version() {
-    if let Ok(custom_version) = env::var("CUSTOM_VERSION") {
-        println!("Using custom version: {}", custom_version);
-    } else {
-        println!("Using standard version of the library.");
-    }
-}
+#[cfg(all(feature = "wasm-bindgen", feature = "dim2"))]
+use wasm_bindgen::prelude::*;
 
-// Call the log function when the library is initialized.
-log_custom_version();
+#[cfg(all(feature = "wasm-bindgen", feature = "dim2"))]
+#[wasm_bindgen(start)]
+pub fn init() {
+    use wasm_bindgen::JsValue;
+
+    // Logs immediately when the WebAssembly module loads!
+    web_sys::console::log_1(&JsValue::from_str("✅ parry wasm module loaded!"));
+}
