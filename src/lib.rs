@@ -263,3 +263,16 @@ mod simd {
     /// SIMD_WIDTH - 1
     pub const SIMD_LAST_INDEX: usize = 3;
 }
+
+use std::env;
+
+pub fn log_custom_version() {
+    if let Ok(custom_version) = env::var("CUSTOM_VERSION") {
+        println!("Using custom version: {}", custom_version);
+    } else {
+        println!("Using standard version of the library.");
+    }
+}
+
+// Call the log function when the library is initialized.
+log_custom_version();
