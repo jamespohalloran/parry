@@ -60,32 +60,33 @@ impl NormalConstraints for EdgePseudoTriangles {
         let next_dir = self.edges[1];
         let segment_dot = segment_dir.dot(&next_dir);
 
-        let mut x = normal.x;
-        let mut y = normal.y;
+        let abs_x = normal.x.abs();
+        let abs_y = normal.y.abs();
 
-        if segment_dot.abs() < 0.8 {
-            // Hard corner
-            if y.abs() > x.abs() {
-                // Mostly vertical impact
-                x *= 0.2; // Keep 20% of horizontal
-                y = y.signum();
+        // Only apply hard corner logic if the object is moving downward
+        if segment_dot.abs() < 0.8 && normal.y < 0.0 {
+            // Hard corner detected AND ball moving down
+            if abs_y > abs_x {
+                // More vertical impact -> snap pure vertical
+                normal.x = 0.0;
+                normal.y = normal.y.signum();
             } else {
-                // Mostly horizontal impact
-                y *= 0.2; // Keep 20% of vertical
-                x = x.signum();
+                // More horizontal impact -> snap pure horizontal
+                normal.x = normal.x.signum();
+                normal.y = 0.0;
             }
-        } else {
-            // Flat edge
-            if x.abs() > y.abs() {
-                y *= 0.2;
-                x = x.signum();
+        }
+        else {
+            // Flat edge or ball moving up
+            if abs_x > abs_y {
+                normal.x = normal.x.signum();
+                normal.y = 0.0;
             } else {
-                x *= 0.2;
-                y = y.signum();
+                normal.x = 0.0;
+                normal.y = normal.y.signum();
             }
         }
 
-        *normal = Vector::new(x, y).normalize();
         true
     }
 }
