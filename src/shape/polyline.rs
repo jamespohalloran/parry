@@ -56,29 +56,39 @@ impl EdgePseudoTriangles {
 
 impl NormalConstraints for EdgePseudoTriangles {
     fn project_local_normal_mut(&self, normal: &mut Vector<Real>) -> bool {
+        // Prefer face normal first
         let face_normal = self.face;
         let edge_normal1 = self.edges[0];
         let edge_normal2 = self.edges[1];
 
         let dot_face = normal.dot(&face_normal);
-        let dot_edge1 = normal.dot(&edge_normal1);
-        let dot_edge2 = normal.dot(&edge_normal2);
 
-        let best = dot_face.max(dot_edge1.max(dot_edge2));
-
-        if best == dot_face {
+        if dot_face >= 0.5 {
+            // If we're reasonably aligned with the face, just snap to face
             *normal = face_normal;
-        } else if best == dot_edge1 {
-            *normal = edge_normal1;
         } else {
-            *normal = edge_normal2;
+            // Otherwise pick whichever edge normal aligns better
+            let dot1 = normal.dot(&edge_normal1);
+            let dot2 = normal.dot(&edge_normal2);
+
+            if dot1 > dot2 {
+                *normal = edge_normal1;
+            } else {
+                *normal = edge_normal2;
+            }
         }
+
+        // If the new normal is somehow tiny, fallback to face
+        if normal.norm_squared() < 0.8 {
+            *normal = face_normal;
+        }
+
+        // Always normalize to make sure it's unit length
+        *normal = normal.normalize();
 
         true
     }
 }
-
-
 
 impl Polyline {
     /// Creates a new polyline from a vertex buffer and an index buffer.
