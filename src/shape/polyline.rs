@@ -23,6 +23,37 @@ pub struct Polyline {
     indices: Vec<[u32; 2]>,
 }
 
+#[derive(Clone, Debug)]
+/// Represents pseudo-triangles for polyline edges.
+pub struct EdgePseudoTriangles {
+    pub face: Vector<Real>,
+    pub edges: [Vector<Real>; 2],
+}
+
+impl EdgePseudoTriangles {
+    /// Creates a new `EdgePseudoTriangles` for a given edge.
+    pub fn new(edge: &Segment, next_edge: &Segment) -> Self {
+        let face = edge.scaled_direction().normalize();
+        let edges = [
+            edge.scaled_direction().normalize(),
+            next_edge.scaled_direction().normalize(),
+        ];
+
+        Self { face, edges }
+    }
+
+    /// Projects a direction onto the pseudo-triangle.
+    pub fn project_direction(&self, dir: &mut Vector<Real>) -> bool {
+        let dot_face = dir.dot(&self.face);
+        if dot_face >= 0.0 {
+            *dir = self.face;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 impl Polyline {
     /// Creates a new polyline from a vertex buffer and an index buffer.
     pub fn new(vertices: Vec<Point<Real>>, indices: Option<Vec<[u32; 2]>>) -> Self {
@@ -276,6 +307,19 @@ impl Polyline {
         }
 
         proj
+    }
+
+    /// Computes pseudo-triangles for all edges of the polyline.
+    pub fn compute_edge_pseudo_triangles(&self) -> Vec<EdgePseudoTriangles> {
+        let mut pseudo_triangles = Vec::new();
+
+        for i in 0..self.num_segments() {
+            let edge = self.segment(i as u32);
+            let next_edge = self.segment((i as u32 + 1) % self.num_segments() as u32);
+            pseudo_triangles.push(EdgePseudoTriangles::new(&edge, &next_edge));
+        }
+
+        pseudo_triangles
     }
 }
 
