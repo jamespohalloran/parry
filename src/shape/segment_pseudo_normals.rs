@@ -29,6 +29,18 @@ impl NormalConstraints for SegmentPseudoNormals {
     fn project_local_normal_mut(&self, dir: &mut Vector<Real>) -> bool {
         let dot_face = dir.dot(&self.face);
 
+        // Polylines have an "outside" and "inside", we always want to allow 
+        // collision responses that push away from the polyline (i.e., along the normal)
+        // This ensures objects never get "stuck" on the polyline and can always bounce off
+        if dot_face >= 0.0 {
+            // For normals that are already pointing outward (in the general direction of the face normal),
+            // we want to maintain their direction as much as possible, while still ensuring valid collision responses
+            return true;
+        }
+
+        // For normals pointing inward, we need to adjust them to point outward
+        // We'll use a more lenient approach than with triangles to prevent getting stuck
+
         // Find the closest pseudo-normal.
         let dots = Vector2::new(
             dir.dot(&self.vertices[0]),
@@ -37,46 +49,44 @@ impl NormalConstraints for SegmentPseudoNormals {
         let closest_dot = dots.imax();
         let closest_vertex = &self.vertices[closest_dot];
 
-        // Apply the projection. This is similar to the triangle implementation
-        // but simplified for segments which only have two vertices.
-
+        // Apply a modified projection that prevents getting stuck on the polyline
+        // We'll reflect the normal if it's pointing inward too much
+        
         if *closest_vertex == self.face {
             // The normal cone is degenerate, there is only one possible direction.
             *dir = *self.face;
-            return dot_face >= 0.0;
+            return true; // Always allow collisions with the standard face normal
         }
 
+        // Project the normal to ensure it's in a valid range
         let dot_vertex_face = self.face.dot(closest_vertex);
         let dot_dir_face = self.face.dot(dir);
-        let dot_corrected_dir_face = 2.0 * dot_vertex_face * dot_vertex_face - 1.0; // cos(2 * angle(closest_vertex, face))
-
-        if dot_dir_face >= dot_corrected_dir_face {
-            // The direction is in the pseudo-normal cone. No correction to apply.
+        
+        // Use a wider cone tolerance to make collision handling more forgiving
+        // We want to prevent getting stuck on segments
+        let tolerance = -0.2; // More lenient than the original implementation
+        
+        if dot_dir_face >= tolerance {
+            // The direction is acceptable - not pointing too far inward
             return true;
         }
 
-        // We need to correct the direction.
-        let vertex_on_normal = *self.face * dot_vertex_face;
-        let vertex_orthogonal_to_normal = **closest_vertex - vertex_on_normal;
-
-        let dir_on_normal = *self.face * dot_dir_face;
-        let dir_orthogonal_to_normal = *dir - dir_on_normal;
-        let Some(unit_dir_orthogonal_to_normal) = dir_orthogonal_to_normal.try_normalize(1.0e-6)
-        else {
-            return dot_face >= 0.0;
-        };
-
-        // Similar to triangle pseudo-normals implementation
-        let Some(adjusted_pseudo_normal) = (vertex_on_normal
-            + unit_dir_orthogonal_to_normal * vertex_orthogonal_to_normal.norm())
-        .try_normalize(1.0e-6) else {
-            return dot_face >= 0.0;
-        };
-
-        // The reflection of the face normal wrt. the adjusted pseudo-normal gives us the
-        // second end of the pseudo-normal cone the direction is projected on.
-        *dir = adjusted_pseudo_normal * (2.0 * self.face.dot(&adjusted_pseudo_normal)) - *self.face;
-        dot_face >= 0.0
+        // Direction is pointing too far inward - reflect it outward
+        // Instead of complex cone projection, we'll simply use a weighted average 
+        // that pushes the normal outward
+        
+        // Weighted average of original dir and face normal, biased toward face normal
+        let weight = 0.7; // Bias toward face normal
+        let adjusted_dir = *dir * (1.0 - weight) + *self.face * weight;
+        
+        if let Some(normalized) = adjusted_dir.try_normalize(1.0e-6) {
+            *dir = normalized;
+            return true;
+        } else {
+            // Fallback to face normal if normalization fails
+            *dir = *self.face;
+            return true;
+        }
     }
 }
 
