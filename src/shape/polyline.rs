@@ -42,13 +42,19 @@ impl Polyline {
         // update this tree dynamically.
         qbvh.clear_and_rebuild(data, 0.0);
 
-        Self {
+        let mut polyline = Self {
             qbvh,
             vertices,
             indices,
             #[cfg(feature = "alloc")]
             pseudo_normals: None,
-        }
+        };
+        
+        // Automatically compute the pseudo-normals to prevent ghost collisions
+        #[cfg(feature = "alloc")]
+        polyline.recompute_pseudo_normals();
+        
+        polyline
     }
     
     /// Computes and caches the segment pseudo-normals for this polyline.
