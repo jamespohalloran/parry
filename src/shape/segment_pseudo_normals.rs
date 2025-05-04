@@ -9,6 +9,12 @@ use crate::query::details::NormalConstraints;
 
 /// The pseudo-normals of a segment providing approximations of its feature's normal cones.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde-serialize", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Deserialize, rkyv::Serialize),
+    archive(check_bytes)
+)]
 pub struct SegmentPseudoNormals {
     /// The segment's face normal.
     pub face: UnitVector<Real>,
