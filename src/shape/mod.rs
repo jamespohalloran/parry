@@ -49,6 +49,7 @@ pub use self::polygonal_feature3d::PolygonalFeature;
 #[cfg(feature = "dim3")]
 pub use self::tetrahedron::{Tetrahedron, TetrahedronPointLocation};
 pub use self::triangle_pseudo_normals::TrianglePseudoNormals;
+pub use self::segment_pseudo_normals::SegmentPseudoNormals;
 #[cfg(feature = "alloc")]
 pub use self::trimesh::*;
 
@@ -123,5 +124,6 @@ mod polygonal_feature2d;
 #[cfg(feature = "alloc")]
 mod shared_shape;
 mod triangle_pseudo_normals;
+mod segment_pseudo_normals;
 #[cfg(feature = "alloc")]
 mod voxels;

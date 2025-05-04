@@ -1,9 +1,9 @@
 use crate::bounding_volume::Aabb;
-use crate::math::{Isometry, Point, Real, Vector};
+use crate::math::{Isometry, Point, Real, UnitVector, Vector};
 use crate::partitioning::Qbvh;
 use crate::query::{PointProjection, PointQueryWithLocation};
 use crate::shape::composite_shape::SimdCompositeShape;
-use crate::shape::{FeatureId, Segment, SegmentPointLocation, Shape, TypedSimdCompositeShape};
+use crate::shape::{FeatureId, Segment, SegmentPointLocation, SegmentPseudoNormals, Shape, TypedSimdCompositeShape};
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
@@ -21,6 +21,9 @@ pub struct Polyline {
     qbvh: Qbvh<u32>,
     vertices: Vec<Point<Real>>,
     indices: Vec<[u32; 2]>,
+    /// Pseudo-normals used to handle ghost collisions/bumps at segment junctions.
+    #[cfg(feature = "alloc")]
+    pseudo_normals: Option<Vec<SegmentPseudoNormals>>,
 }
 
 impl Polyline {
@@ -43,7 +46,112 @@ impl Polyline {
             qbvh,
             vertices,
             indices,
+            #[cfg(feature = "alloc")]
+            pseudo_normals: None,
         }
+    }
+    
+    /// Computes and caches the segment pseudo-normals for this polyline.
+    ///
+    /// These pseudo-normals help avoid ghost collisions/bumps by ensuring
+    /// that contact normals are always consistent, especially at segment junctions.
+    #[cfg(feature = "alloc")]
+    pub fn recompute_pseudo_normals(&mut self) {
+        if self.indices.len() <= 1 {
+            self.pseudo_normals = None;
+            return;
+        }
+        
+        let mut pseudo_normals = Vec::with_capacity(self.indices.len());
+        
+        for (i, idx) in self.indices.iter().enumerate() {
+            let segment = Segment::new(
+                self.vertices[idx[0] as usize],
+                self.vertices[idx[1] as usize],
+            );
+            
+            // For 2D, get the perpendicular normal. For 3D, this requires more careful handling.
+            #[cfg(feature = "dim2")]
+            let face_normal = {
+                let dir = segment.scaled_direction();
+                UnitVector::new_normalize(Vector::new(-dir.y, dir.x))
+            };
+            
+            #[cfg(feature = "dim3")]
+            let face_normal = {
+                // For 3D, we'd need to determine an appropriate normal direction.
+                // This might depend on the application context.
+                // Here we use a simplified approach.
+                let dir = segment.scaled_direction();
+                if dir.x.abs() < dir.y.abs() && dir.x.abs() < dir.z.abs() {
+                    // Use X-axis for cross product
+                    UnitVector::new_normalize(dir.cross(&Vector::x()))
+                } else {
+                    // Use Y-axis for cross product
+                    UnitVector::new_normalize(dir.cross(&Vector::y()))
+                }
+            };
+            
+            // Compute vertex normals
+            let mut vertex_normals = [face_normal; 2];
+            
+            // For each endpoint, check if it's shared with other segments
+            for v_idx in 0..2 {
+                let vertex_id = idx[v_idx];
+                
+                // Find all segments that share this vertex
+                let connected_segments: Vec<_> = self.indices.iter().enumerate()
+                    .filter(|&(j, other_idx)| j != i && (other_idx[0] == vertex_id || other_idx[1] == vertex_id))
+                    .collect();
+                
+                if !connected_segments.is_empty() {
+                    // Calculate average normal of connected segments
+                    let mut avg_normal = *face_normal;
+                    
+                    for &(j, other_idx) in &connected_segments {
+                        let other_segment = Segment::new(
+                            self.vertices[other_idx[0] as usize],
+                            self.vertices[other_idx[1] as usize],
+                        );
+                        
+                        #[cfg(feature = "dim2")]
+                        let other_normal = {
+                            let dir = other_segment.scaled_direction();
+                            Vector::new(-dir.y, dir.x).normalize()
+                        };
+                        
+                        #[cfg(feature = "dim3")]
+                        let other_normal = {
+                            let dir = other_segment.scaled_direction();
+                            if dir.x.abs() < dir.y.abs() && dir.x.abs() < dir.z.abs() {
+                                dir.cross(&Vector::x()).normalize()
+                            } else {
+                                dir.cross(&Vector::y()).normalize()
+                            }
+                        };
+                        
+                        avg_normal += other_normal;
+                    }
+                    
+                    if let Some(norm) = avg_normal.try_normalize(1.0e-6) {
+                        vertex_normals[v_idx] = UnitVector::new_normalize(norm);
+                    }
+                }
+            }
+            
+            pseudo_normals.push(SegmentPseudoNormals {
+                face: face_normal,
+                vertices: vertex_normals,
+            });
+        }
+        
+        self.pseudo_normals = Some(pseudo_normals);
+    }
+    
+    /// Gets the segment pseudo-normal at the given index.
+    #[cfg(feature = "alloc")]
+    pub fn segment_pseudo_normal(&self, i: u32) -> Option<&SegmentPseudoNormals> {
+        self.pseudo_normals.as_ref().and_then(|normals| normals.get(i as usize))
     }
 
     /// Compute the axis-aligned bounding box of this polyline.
@@ -118,15 +226,21 @@ impl Polyline {
 
     /// Computes a scaled version of this polyline.
     pub fn scaled(mut self, scale: &Vector<Real>) -> Self {
+        let qbvh = self.qbvh.scaled(scale);
+
         self.vertices
             .iter_mut()
             .for_each(|pt| pt.coords.component_mul_assign(scale));
+
         Self {
-            qbvh: self.qbvh.scaled(scale),
+            qbvh,
             vertices: self.vertices,
             indices: self.indices,
+            #[cfg(feature = "alloc")]
+            pseudo_normals: self.pseudo_normals,
         }
     }
+
 
     /// Reverse the orientation of this polyline by swapping the indices of all
     /// its segments and reverting its index buffer.
@@ -285,8 +399,17 @@ impl SimdCompositeShape for Polyline {
         i: u32,
         f: &mut dyn FnMut(Option<&Isometry<Real>>, &dyn Shape, Option<&dyn NormalConstraints>),
     ) {
-        let tri = self.segment(i);
-        f(None, &tri, None)
+        let seg = self.segment(i);
+        
+        #[cfg(feature = "alloc")]
+        {
+            if let Some(pseudo_normal) = self.segment_pseudo_normal(i) {
+                f(None, &seg, Some(pseudo_normal));
+                return;
+            }
+        }
+        
+        f(None, &seg, None)
     }
 
     fn qbvh(&self) -> &Qbvh<u32> {
@@ -296,7 +419,10 @@ impl SimdCompositeShape for Polyline {
 
 impl TypedSimdCompositeShape for Polyline {
     type PartShape = Segment;
+    #[cfg(not(feature = "alloc"))]
     type PartNormalConstraints = ();
+    #[cfg(feature = "alloc")]
+    type PartNormalConstraints = SegmentPseudoNormals;
     type PartId = u32;
 
     #[inline(always)]
@@ -310,6 +436,15 @@ impl TypedSimdCompositeShape for Polyline {
         ),
     ) {
         let seg = self.segment(i);
+        
+        #[cfg(feature = "alloc")]
+        {
+            if let Some(pseudo_normal) = self.segment_pseudo_normal(i) {
+                f(None, &seg, Some(pseudo_normal));
+                return;
+            }
+        }
+        
         f(None, &seg, None)
     }
 
@@ -320,6 +455,15 @@ impl TypedSimdCompositeShape for Polyline {
         mut f: impl FnMut(Option<&Isometry<Real>>, &dyn Shape, Option<&dyn NormalConstraints>),
     ) {
         let seg = self.segment(i);
+        
+        #[cfg(feature = "alloc")]
+        {
+            if let Some(pseudo_normal) = self.segment_pseudo_normal(i) {
+                f(None, &seg, Some(pseudo_normal));
+                return;
+            }
+        }
+        
         f(None, &seg, None)
     }
 
